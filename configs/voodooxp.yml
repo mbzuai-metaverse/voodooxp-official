@@ -1,0 +1,132 @@
+datasets:
+  train:
+    data_class: ConcatDataset
+    batch_size: 1
+    num_workers: 3
+
+    kwargs:
+      use_generic_face: False
+      nersemble:
+        data_class: NersembleLmdbDataset
+        sampling_weight: !!float 0.2
+        kwargs:
+          data_root: 'datasets/nersemble_final.lmdb'
+          mode: 'reenactment'
+          image_raw_size: 256
+
+      celebvhq:
+        data_class: CelebVHQDataset
+        sampling_weight: !!float 0.8
+        kwargs:
+          data_root: 'datasets/celebvhq.zip'
+          mode: 'reenactment'
+          image_raw_size: 256
+  val:
+    data_class: ValidationDataset
+    batch_size: 1
+    num_workers: 4
+    kwargs:
+      data_root: 'datasets/validation_set'
+      debug: False
+
+train:
+  num_gpus: 7
+  num_nodes: 1
+  val_check_interval: 1000000
+  max_steps: 600000
+  use_mixed_precision: False
+  checkpoint_dir: experiments/voodooxp_secret_stage
+  save_interval: 1000
+  auto_load: True
+  use_compile: False
+
+model:
+  model_class: VoodooXPLightningModel
+  params:
+    triplane_nd: 32 
+    triplane_h: 256 
+    triplane_w: 256  
+    subsampling_ratio: 0.7
+    neural_rendering_resolution: 256
+    use_aug: True
+    pretrained_path: experiments/pretrained_weights/voodooxp_weight_v1.0.ckpt
+    eg3d_network_pkl: experiments/pretrained_weights/eg3d_ffhq_rebalance.pth
+    arcface_network_pkl: experiments/pretrained_weights/model_ir_se50.pth
+    neutralizer_network_pkl: experiments/pretrained_weights/neutralizer_iter34k.pth
+
+    rendering_kwargs:
+      decoder_lr_mul: 1.0
+      depth_resolution: 96
+      depth_resolution_importance: 96
+      camera_radius: &camera_radius 2.7
+      lookat_point: &lookat_point [0.0, 0.0, 0.2]
+      ray_start: 2.2
+      ray_end: 3.4
+      box_warp: 1
+      disparity_space_sampling: False
+      clamp_mode: 'softplus'
+
+    superresolution_kwargs:
+      model_class: GFPGANv1Clean
+      params:
+        out_size: 512
+        num_style_feat: 512
+        channel_multiplier: 2
+        decoder_load_path: ~
+        fix_decoder: False
+        num_mlp: 8
+        input_is_latent: True
+        different_w: True
+        narrow: 1
+        sft_half: True
+
+    loss_kwargs:
+      losses_on_hr: False
+      GANLoss:
+        params:
+          gan_mode: 'hinge'
+          # For GAN hinge loss, target labels do not matter. If you use another mode, remember to set it or use default
+          # labels (0/1)
+          # There is no weight here because there are multiple gan losses and their weight
+          # is set by discriminators option
+      l1: # Reconstruction loss
+        weight: !!float 1.0
+      lpips: # Perceptual loss
+        weight: !!float 1.0
+      gan:
+        weight: !!float 0.1
+      id: # Category-specific loss
+        weight: !!float 0.0
+      triplane:
+        weight: !!float 0.0
+      eyegaze:
+        weight: !!float 0.0
+      neutralizing_loss:
+        weight: !!float 1.0
+      cycle_consistency:
+        weight: !!float 1.0
+
+    training_kwargs:
+      frozen_components: [
+        'lp3d.triplane_encoder.ehi.*', 'lp3d.triplane_encoder.conv*', 'lp3d.triplane_encoder.patch_embed*',
+        'lp3d.triplane_encoder.transformer_block*',
+
+        'lp3d.triplane_encoder.elo.block*', 'lp3d.triplane_encoder.elo.conv*',
+        'lp3d.triplane_encoder.elo.patch_embed*', 'lp3d.triplane_encoder.elo.deeplabv3_backbone*',
+
+        'lp3d.superresolution.*', 'lp3d.decoder.*'
+      ]
+      ref_loss_freq: 10
+      learning_rate: !!float 1e-5
+      betas: [0.9, 0.999]
+      eps: !!float 1e-8
+      weight_decay: !!float 1e-4
+
+    val_kwargs:
+      lookat_point: *lookat_point 
+      batch_size: 4
+      pitch_range: 0.25
+      yaw_range: 0.35
+      radius: *camera_radius
+      num_keyframes: 25
+      cam_batch: 5

@@ -1,0 +1,118 @@
+datasets:
+  train:
+    data_class: ConcatDataset
+    batch_size: 1
+    num_workers: 2
+
+    kwargs:
+      use_generic_face: False
+      nersemble:
+        data_class: NersembleMemoryEfficientDataset
+        sampling_weight: !!float 0.5
+        kwargs:
+          data_root: 'datasets/nersemble_toy2_chunks'
+          mode: '3dreconstruction'
+          image_raw_size: 256
+      diffportrait3d:
+        data_class: DiffPortrait3dDataset
+        sampling_weight: !!float 0.5
+        kwargs:
+          data_root: 'datasets/diffportrait3d_synthetic_data.zip'
+          mode: '3dreconstruction'
+          image_raw_size: 256
+
+  val:
+    data_class: ValidationDataset
+    batch_size: 1
+    num_workers: 4
+    kwargs:
+      data_root: 'datasets/validation_set'
+      debug: False
+
+train:
+  num_nodes: 1
+  num_gpus: 1
+  val_check_interval: 10000
+  max_steps: 600000
+  use_mixed_precision: False
+  checkpoint_dir: experiments/lp3d_256x256_nersemble_celebvhq_diffusion_wGAN_wSuperres
+  save_interval: 10000
+  auto_load: True
+  use_compile: False
+
+model:
+  model_class: Lp3DLightning
+  params:
+    triplane_nd: 32 
+    triplane_h: 256 
+    triplane_w: 256  
+    neural_rendering_resolution: 256
+    subsampling_ratio: 0.7
+    pretrained_path: experiments/pretrained_models/lp3d_finetuned_iter210k.ckpt
+    eg3d_network_pkl: experiments/pretrained_models/eg3d_ffhq_rebalance.pth 
+
+    rendering_kwargs:
+      decoder_lr_mul: 1.0
+      depth_resolution: 96
+      depth_resolution_importance: 96
+      camera_radius: 2.7
+      ray_start: 2.25
+      ray_end: 3.3
+      box_warp: 1
+      disparity_space_sampling: False
+      clamp_mode: 'softplus'
+
+    superresolution_kwargs:
+      model_class: GFPGANv1Clean
+      params:
+        out_size: 512
+        num_style_feat: 512
+        channel_multiplier: 2
+        decoder_load_path: ~
+        fix_decoder: False
+        num_mlp: 8
+        input_is_latent: True
+        different_w: True
+        narrow: 1
+        sft_half: True
+
+    loss_kwargs:
+      losses_on_hr: False
+      GANLoss:
+        params:
+          gan_mode: 'hinge'
+          # For GAN hinge loss, target labels do not matter. If you use another mode, remember to set it or use default
+          # labels (0/1)
+          # There is no weight here because there are multiple gan losses and their weight
+          # is set by discriminators option
+      l1: # Reconstruction loss
+        weight: !!float 1.0
+      lpips: # Perceptual loss
+        weight: !!float 1.0
+      id: # Category-specific loss
+        weight: !!float 0.0
+      feat: # L1 loss on the feature image
+        weight: !!float 0.0
+      triplane:
+        weight: !!float 0.01
+      gan:
+        weight: !!float 0.1
+      ray_entropy:
+        weight: !!float 0.001
+
+    training_kwargs:
+      frozen_components: ["superresolution.*"]
+      ref_loss_freq: 10
+      learning_rate: !!float 4e-5
+      betas: [0.9, 0.999]
+      eps: !!float 1e-8
+      weight_decay: !!float 1e-4
+
+    val_kwargs:
+      lookat_point: [0.0, 0.0, 0.2]
+      batch_size: 4
+      pitch_range: 0.25
+      yaw_range: 0.35
+      radius: 2.7
+      num_keyframes: 25
+      cam_batch: 1
