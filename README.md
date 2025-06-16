@@ -43,7 +43,7 @@ or if you prefer pip:
 pip install -r requirements.txt
 ```
 
-Next, download the [pre-trained weights](https://mbzuai-metaverse.github.io/voodooxp) and put it in `./experiments/pretrained_weights`.
+Next, download the [pre-trained weights](https://huggingface.co/polyfish/VoodooXP) and put it in `./experiments/pretrained_weights`.
 
 For training, TODO.
 
@@ -103,7 +103,10 @@ We also provided a few inference example scenarios in `scripts/inference_sample_
 
 ## Training
 ### Dataset Preparation
+TODO
 
 ### Train the lifting module
+TODO
 
 ### Train the expression transferring module
+TODO
